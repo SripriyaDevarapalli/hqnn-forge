@@ -14,9 +14,7 @@ def _script():
     if examples_dir not in sys.path:
         sys.path.insert(0, examples_dir)
 
-    spec = importlib.util.spec_from_file_location(
-        "does_the_quantum_layer_help", path
-    )
+    spec = importlib.util.spec_from_file_location("does_the_quantum_layer_help", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -29,10 +27,7 @@ example = _script()
 
 def test_near_constant_column_is_only_centred():
     rng = np.random.default_rng(0)
-    near_constant = (
-        0.5
-        + rng.integers(-1, 2, size=200) * 2.0**-53
-    )
+    near_constant = 0.5 + rng.integers(-1, 2, size=200) * 2.0**-53
     varying = 0.5 + 1e-6 * rng.standard_normal(200)
     features = np.column_stack((near_constant, varying))
 
@@ -40,16 +35,12 @@ def test_near_constant_column_is_only_centred():
     val_rows = np.arange(150, 175)
     test_rows = np.arange(175, 200)
 
-    fitted, validation, test = example.standardise(
-        features, fit_rows, val_rows, test_rows
-    )
+    fitted, validation, test = example.standardise(features, fit_rows, val_rows, test_rows)
 
     expected = near_constant - near_constant[fit_rows].mean()
     np.testing.assert_allclose(fitted[:, 0], expected[fit_rows], atol=0)
     assert np.max(np.abs(fitted[:, 0])) < 2e-16
 
-    np.testing.assert_allclose(
-        validation[:, 0], expected[val_rows], atol=0
-    )
+    np.testing.assert_allclose(validation[:, 0], expected[val_rows], atol=0)
     np.testing.assert_allclose(test[:, 0], expected[test_rows], atol=0)
     np.testing.assert_allclose(fitted[:, 1].std(), 1.0, rtol=1e-9)

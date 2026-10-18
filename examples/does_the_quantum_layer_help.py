@@ -67,6 +67,7 @@ def load_data() -> tuple[np.ndarray, np.ndarray]:
     y = (score > np.quantile(score, 0.92)).astype(np.int64)
     return X, y
 
+
 def standardise(
     features: np.ndarray,
     fit_rows: np.ndarray,
