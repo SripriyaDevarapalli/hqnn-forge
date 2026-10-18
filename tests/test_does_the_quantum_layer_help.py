@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
+
+pytest.importorskip("sklearn")  # the example imports hqnn_forge.sklearn
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -14,11 +17,17 @@ def _script():
     if examples_dir not in sys.path:
         sys.path.insert(0, examples_dir)
 
-    spec = importlib.util.spec_from_file_location("does_the_quantum_layer_help", path)
+        spec = importlib.util.spec_from_file_location("does_the_quantum_layer_help", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+
+    sys.path.insert(0, examples_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(examples_dir)
+
     return module
 
 
@@ -44,3 +53,18 @@ def test_near_constant_column_is_only_centred():
     np.testing.assert_allclose(validation[:, 0], expected[val_rows], atol=0)
     np.testing.assert_allclose(test[:, 0], expected[test_rows], atol=0)
     np.testing.assert_allclose(fitted[:, 1].std(), 1.0, rtol=1e-9)
+    fit = varying[fit_rows]
+    expected_varying = (varying - fit.mean()) / fit.std()
+
+    np.testing.assert_allclose(
+        validation[:, 1],
+        expected_varying[val_rows],
+        rtol=0,
+        atol=1e-8,
+    )
+    np.testing.assert_allclose(
+        test[:, 1],
+        expected_varying[test_rows],
+        rtol=0,
+        atol=1e-8,
+    )

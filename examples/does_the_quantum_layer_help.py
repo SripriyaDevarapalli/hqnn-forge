@@ -75,8 +75,10 @@ def standardise(
 ) -> list[np.ndarray]:
     """Standardise rows using only the fitting rows' statistics.
 
-    Reuses standardise_features, including its rounding-aware
-    constant-column rule, so near-constant columns are only centred.
+    Statistics computed over test rows would leak them into training,
+    making the test score optimistic. Reuse standardise_features,
+    including its rounding-aware constant-column rule, so near-constant
+    columns are only centred.
     """
     scaled = standardise_features(features, fit_rows)
     return [scaled[rows] for rows in (fit_rows, *other_rows)]
