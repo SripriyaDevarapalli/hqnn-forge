@@ -13,9 +13,15 @@ stopping) over several datasets in one call; here every step is spelled out.
 It runs out of the box on a synthetic imbalanced dataset.  To use your own
 data, replace ``load_data`` (step 1).
 
+
 Requires the scikit-learn extra:
 
     pip install "hqnn-forge[sklearn]"
+
+This script imports standardise_features from
+benchmark_rydberg_features.py in the same folder, so run it from
+the repository or copy it together with that file.
+
 
 Usage
 -----
