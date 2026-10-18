@@ -14,10 +14,7 @@ def _script():
     path = ROOT / "examples" / "does_the_quantum_layer_help.py"
     examples_dir = str(ROOT / "examples")
 
-    if examples_dir not in sys.path:
-        sys.path.insert(0, examples_dir)
-
-        spec = importlib.util.spec_from_file_location("does_the_quantum_layer_help", path)
+    spec = importlib.util.spec_from_file_location("does_the_quantum_layer_help", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -31,10 +28,9 @@ def _script():
     return module
 
 
-example = _script()
-
-
 def test_near_constant_column_is_only_centred():
+    example = _script()
+
     rng = np.random.default_rng(0)
     near_constant = 0.5 + rng.integers(-1, 2, size=200) * 2.0**-53
     varying = 0.5 + 1e-6 * rng.standard_normal(200)

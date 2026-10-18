@@ -13,15 +13,13 @@ stopping) over several datasets in one call; here every step is spelled out.
 It runs out of the box on a synthetic imbalanced dataset.  To use your own
 data, replace ``load_data`` (step 1).
 
-
 Requires the scikit-learn extra:
 
     pip install "hqnn-forge[sklearn]"
 
-This script imports standardise_features from
-benchmark_rydberg_features.py in the same folder, so run it from
+This script imports ``standardise_features`` from
+``benchmark_rydberg_features.py`` in the same folder, so run it from
 the repository or copy it together with that file.
-
 
 Usage
 -----
@@ -82,7 +80,7 @@ def standardise(
     """Standardise rows using only the fitting rows' statistics.
 
     Statistics computed over test rows would leak them into training,
-    making the test score optimistic. Reuse standardise_features,
+    making the test score optimistic. Reuses ``standardise_features``,
     including its rounding-aware constant-column rule, so near-constant
     columns are only centred.
     """
