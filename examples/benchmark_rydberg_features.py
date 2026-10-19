@@ -320,7 +320,6 @@ and ``--separation-seed`` still apply.
 from __future__ import annotations
 
 import argparse
-import zipfile
 import contextlib
 import dataclasses
 import hashlib
@@ -329,6 +328,7 @@ import json
 import math
 import os
 import time
+import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1385,16 +1385,16 @@ class FeatureCache:
         if path is not None and path.exists():
             try:
                 with np.load(path, allow_pickle=False) as stored:
-                    cached = CachedFeatures(
+                    return CachedFeatures(
                         np.asarray(stored["features"], dtype=np.float64),
                         float(stored["seconds"]),
                         True,
                         json.loads(str(stored["environment"])),
                     )
-                return cached
             except (EOFError, OSError, ValueError, KeyError, zipfile.BadZipFile):
                 # Recover from missing, truncated, or invalid cache entries by recomputing.
                 pass
+
         start = time.perf_counter()
         features = np.ascontiguousarray(compute(inputs), dtype=np.float64)
         seconds = time.perf_counter() - start
