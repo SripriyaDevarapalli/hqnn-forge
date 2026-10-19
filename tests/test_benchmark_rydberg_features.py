@@ -1274,6 +1274,7 @@ class TestCache:
         monkeypatch.setattr(bench.np, "load", original_load)
         assert cache.fetch(self.inputs, self.labels, config, compute).hit is True
         assert calls == [12, 12]
+
     def test_a_change_of_the_data_is_a_miss(self, tmp_path: Path) -> None:
         compute, calls = self._counting()
         config = {"config": _map_by_hand(4, 1.0, 0.0, 1).get_config()}
