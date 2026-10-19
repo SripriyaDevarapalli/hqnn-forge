@@ -1203,6 +1203,77 @@ class TestCache:
         assert len(list((tmp_path / "cache").glob("*.npz"))) == 1
         assert not list((tmp_path / "cache").glob("*.part"))
 
+    @pytest.mark.parametrize(
+        "corruption",
+        ["empty", "invalid", "missing_features", "missing_environment"],
+    )
+    def test_unreadable_cache_entries_are_recomputed(
+        self, tmp_path: Path, corruption: str
+    ) -> None:
+        compute, calls = self._counting()
+        config = {"config": _map_by_hand(4, 1.0, 0.0, 1).get_config()}
+        cache = bench.FeatureCache(tmp_path)
+        first_path = cache.path(self.inputs, self.labels, config)
+        assert first_path is not None
+
+        # Create a valid entry, then damage it.
+        cache.fetch(self.inputs, self.labels, config, compute)
+        if corruption == "empty":
+            first_path.write_bytes(b"")
+        elif corruption == "invalid":
+            first_path.write_bytes(b"not a valid npz archive")
+        elif corruption == "missing_features":
+            np.savez(
+                first_path,
+                seconds=np.float64(1.0),
+                environment=np.array(json.dumps(cache.environment)),
+            )
+        else:
+            np.savez(
+                first_path,
+                features=np.zeros((12, 4)),
+                seconds=np.float64(1.0),
+            )
+
+        recovered = cache.fetch(self.inputs, self.labels, config, compute)
+        assert recovered.hit is False
+        assert calls == [12, 12]
+        np.testing.assert_array_equal(
+            recovered.features,
+            _map_by_hand(4, 1.0, 0.0, 1).transform(self.inputs),
+        )
+
+        again = cache.fetch(self.inputs, self.labels, config, compute)
+        assert again.hit is True
+        assert calls == [12, 12]
+        np.testing.assert_array_equal(again.features, recovered.features)
+
+    def test_cache_disappearing_during_load_is_recomputed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        compute, calls = self._counting()
+        config = {"config": _map_by_hand(4, 1.0, 0.0, 1).get_config()}
+        cache = bench.FeatureCache(tmp_path)
+        cache.fetch(self.inputs, self.labels, config, compute)
+
+        original_load = bench.np.load
+        disappeared = False
+
+        def load_with_disappearance(file: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal disappeared
+            if not disappeared:
+                disappeared = True
+                raise FileNotFoundError("simulated cache removal during load")
+            return original_load(file, *args, **kwargs)
+
+        monkeypatch.setattr(bench.np, "load", load_with_disappearance)
+        recovered = cache.fetch(self.inputs, self.labels, config, compute)
+
+        assert recovered.hit is False
+        assert calls == [12, 12]
+        monkeypatch.setattr(bench.np, "load", original_load)
+        assert cache.fetch(self.inputs, self.labels, config, compute).hit is True
+        assert calls == [12, 12]
     def test_a_change_of_the_data_is_a_miss(self, tmp_path: Path) -> None:
         compute, calls = self._counting()
         config = {"config": _map_by_hand(4, 1.0, 0.0, 1).get_config()}

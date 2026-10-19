@@ -320,6 +320,7 @@ and ``--separation-seed`` still apply.
 from __future__ import annotations
 
 import argparse
+import zipfile
 import contextlib
 import dataclasses
 import hashlib
@@ -1298,9 +1299,12 @@ class FeatureCache:
     :func:`hqnn_forge.benchmark.fingerprint` of the inputs and their labels,
     of the config, of the environment and of the code digest.  A file holds
     the features, the seconds their computation took, the full environment
-    they were computed in (JSON) and the code digest; it is written to a
-    temporary name and renamed, so an interrupted run leaves no partial
-    entry.  With ``directory=None`` nothing is stored and every request
+    they were computed in (JSON) and the code digest;
+    they are written to a temporary file and atomically replaced into place,
+    so readers do not see a partially written entry. This protects against
+    partial entries during ordinary interruption, but does not guarantee
+    persistence across sudden power loss.
+    With ``directory=None`` nothing is stored and every request
     computes.
 
     Parameters
@@ -1379,13 +1383,18 @@ class FeatureCache:
         """
         path = self.path(inputs, labels, config)
         if path is not None and path.exists():
-            with np.load(path, allow_pickle=False) as stored:
-                return CachedFeatures(
-                    np.asarray(stored["features"], dtype=np.float64),
-                    float(stored["seconds"]),
-                    True,
-                    json.loads(str(stored["environment"])),
-                )
+            try:
+                with np.load(path, allow_pickle=False) as stored:
+                    cached = CachedFeatures(
+                        np.asarray(stored["features"], dtype=np.float64),
+                        float(stored["seconds"]),
+                        True,
+                        json.loads(str(stored["environment"])),
+                    )
+                return cached
+            except (EOFError, OSError, ValueError, KeyError, zipfile.BadZipFile):
+                # Recover from missing, truncated, or invalid cache entries by recomputing.
+                pass
         start = time.perf_counter()
         features = np.ascontiguousarray(compute(inputs), dtype=np.float64)
         seconds = time.perf_counter() - start
