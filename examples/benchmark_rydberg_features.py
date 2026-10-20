@@ -338,11 +338,13 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import errno
 import hashlib
 import itertools
 import json
 import math
 import os
+import stat
 import tempfile
 import time
 import warnings
@@ -2280,11 +2282,18 @@ def check_writable(out: str | os.PathLike[str]) -> None:
     """
     Refuse an ``out`` that cannot be written, and change nothing.
 
-    An existing file is opened for appending and closed without a write, so
-    its content stays as it is; for a new one a temporary file is created in
-    its directory and removed.  Either raises what writing ``out`` would,
-    here, as a ``ValueError`` naming ``out``: a missing directory, a
-    directory in its place, no write permission.
+    An existing regular file is opened for appending and closed without a
+    write, so its content stays as it is.  FIFOs and character or block
+    devices are checked with ``os.access`` without opening them, using effective
+    IDs where supported: opening a FIFO would interfere with its reader.
+    Other existing targets are probed by opening them for appending too.
+    For a new file a temporary file is created in its directory and removed,
+    keeping the output basename in the probe's prefix unless it would exceed
+    ``PC_NAME_MAX`` with the eight random characters appended.  The output
+    basename's byte length is checked against that limit where available;
+    an unavailable filesystem limit is ignored.  Errors become a ``ValueError``
+    naming ``out``: a missing directory, a directory in its place, no write
+    permission, or a name that is too long.
 
     Checked up front rather than by writing to a temporary file renamed over
     ``out`` at the end: :func:`run` writes each record as it comes, so that
@@ -2295,12 +2304,28 @@ def check_writable(out: str | os.PathLike[str]) -> None:
     """
     path = Path(out)
     try:
+        try:
+            mode = os.stat(path).st_mode
+        except FileNotFoundError:
+            mode = None
+        if mode is not None and (stat.S_ISFIFO(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)):
+            if not os.access(path, os.W_OK, effective_ids=os.access in os.supports_effective_ids):
+                raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(path))
         # A broken symlink counts as existing: opening it fails here, not at the first record.
-        if path.exists() or path.is_symlink():
+        elif mode is not None or path.is_symlink():
             with open(path, "a", encoding="utf-8"):
                 pass
         else:
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}."):
+            try:
+                name_max = os.pathconf(path.parent, "PC_NAME_MAX")
+            except (AttributeError, OSError, ValueError):
+                name_max = -1
+            if name_max > 0 and len(os.fsencode(path.name)) > name_max:
+                raise OSError(errno.ENAMETOOLONG, os.strerror(errno.ENAMETOOLONG), str(path))
+            prefix = f".{path.name}."
+            if name_max > 0 and len(os.fsencode(prefix)) + 8 > name_max:
+                prefix = ".out."
+            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=prefix):
                 pass
     except OSError as error:
         reason = error.strerror or str(error)
