@@ -205,7 +205,7 @@ bytes removed, and exits without running the benchmark; files it cannot read as
 an entry (such as ``*.part`` files or entries from before #543) are listed and
 left untouched (#575).
 
-A power loss during ``os.replace`` can still leave the final ``.npz`` entry empty or
+A power loss shortly after ``os.replace`` can still leave the final ``.npz`` entry empty or
 partially written.  On the next request, ``fetch`` treats an unreadable entry as a cache
 miss, warns, and recomputes the features, replacing the damaged entry.  This costs
 recomputation but does not return a false cache hit.  Calling ``fsync`` on every
