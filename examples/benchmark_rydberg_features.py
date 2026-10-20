@@ -1408,6 +1408,8 @@ class PruneReport(NamedTuple):
     files: int
     bytes: int
     unreadable: tuple[Path, ...]
+
+
 _ENTRY_ERRORS = (
     OSError,
     EOFError,
@@ -1417,11 +1419,13 @@ _ENTRY_ERRORS = (
     zipfile.BadZipFile,
 )
 
+
 def _stored_environment(stored: Mapping[str, Any]) -> dict[str, Any]:
     environment = json.loads(str(stored["environment"]))
     if not isinstance(environment, dict):
         raise TypeError("the stored environment is not a JSON object")
     return environment
+
 
 class FeatureCache:
     """
@@ -1515,12 +1519,12 @@ class FeatureCache:
         path = self.path(inputs, labels, config)
         if path is not None:
             try:
-               with np.load(path, allow_pickle=False) as stored:
-                   return CachedFeatures(
-                       np.asarray(stored["features"], dtype=np.float64),
-                       float(stored["seconds"]),
-                       True,
-                       _stored_environment(stored),
+                with np.load(path, allow_pickle=False) as stored:
+                    return CachedFeatures(
+                        np.asarray(stored["features"], dtype=np.float64),
+                        float(stored["seconds"]),
+                        True,
+                        _stored_environment(stored),
                     )
             except FileNotFoundError:
                 pass

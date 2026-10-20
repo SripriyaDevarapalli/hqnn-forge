@@ -1590,9 +1590,7 @@ class TestCache:
             )
 
         with pytest.warns(RuntimeWarning, match="unreadable"):
-            recovered = cache.fetch(
-                self.inputs, self.labels, config, compute
-            )
+            recovered = cache.fetch(self.inputs, self.labels, config, compute)
 
         assert recovered.hit is False
         assert calls == [12, 12]
@@ -1628,9 +1626,7 @@ class TestCache:
         monkeypatch.setattr(bench.np, "load", load_with_disappearance)
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            recovered = cache.fetch(
-                self.inputs, self.labels, config, compute
-            )
+            recovered = cache.fetch(self.inputs, self.labels, config, compute)
 
         assert recovered.hit is False
         assert calls == [12, 12]
