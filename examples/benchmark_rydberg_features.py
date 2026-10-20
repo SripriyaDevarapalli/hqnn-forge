@@ -205,6 +205,13 @@ bytes removed, and exits without running the benchmark; files it cannot read as
 an entry (such as ``*.part`` files or entries from before #543) are listed and
 left untouched (#575).
 
+A power loss during ``os.replace`` can still leave the final ``.npz`` entry empty or
+partially written.  On the next request, ``fetch`` treats an unreadable entry as a cache
+miss, warns, and recomputes the features, replacing the damaged entry.  This costs
+recomputation but does not return a false cache hit.  Calling ``fsync`` on every
+temporary file and the cache directory would add overhead to every write to guard
+against this rare failure, so the cache does not do so.
+
 What the key does not see: the platform string (as ``compare_environment``),
 the packages ``environment()`` does not record, such as a dependency of
 PennyLane or the BLAS behind NumPy, and a change of a recorded package that
@@ -334,6 +341,7 @@ import dataclasses
 import hashlib
 import itertools
 import json
+import warnings
 import math
 import os
 import tempfile
@@ -1400,7 +1408,20 @@ class PruneReport(NamedTuple):
     files: int
     bytes: int
     unreadable: tuple[Path, ...]
+_ENTRY_ERRORS = (
+    OSError,
+    EOFError,
+    ValueError,
+    KeyError,
+    TypeError,
+    zipfile.BadZipFile,
+)
 
+def _stored_environment(stored: Mapping[str, Any]) -> dict[str, Any]:
+    environment = json.loads(str(stored["environment"]))
+    if not isinstance(environment, dict):
+        raise TypeError("the stored environment is not a JSON object")
+    return environment
 
 class FeatureCache:
     """
@@ -1492,18 +1513,23 @@ class FeatureCache:
         ``compute(inputs)``, timed and stored with this cache's environment.
         """
         path = self.path(inputs, labels, config)
-        if path is not None and path.exists():
+        if path is not None:
             try:
-                with np.load(path, allow_pickle=False) as stored:
-                    return CachedFeatures(
-                        np.asarray(stored["features"], dtype=np.float64),
-                        float(stored["seconds"]),
-                        True,
-                        json.loads(str(stored["environment"])),
+               with np.load(path, allow_pickle=False) as stored:
+                   return CachedFeatures(
+                       np.asarray(stored["features"], dtype=np.float64),
+                       float(stored["seconds"]),
+                       True,
+                       _stored_environment(stored),
                     )
-            except (EOFError, OSError, ValueError, KeyError, zipfile.BadZipFile):
-                # Recover from missing, truncated, or invalid cache entries by recomputing.
+            except FileNotFoundError:
                 pass
+            except _ENTRY_ERRORS as error:
+                warnings.warn(
+                    f"feature cache entry {path} is unreadable ({error!r}); recomputing",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         start = time.perf_counter()
         features = np.ascontiguousarray(compute(inputs), dtype=np.float64)
@@ -1562,16 +1588,10 @@ class FeatureCache:
                     if entry_code != self.code_sha256:
                         is_stale = True
                     else:
-                        if "environment" not in stored:
-                            unreadable.append(path)
-                            continue
-                        raw_env = json.loads(str(stored["environment"]))
-                        if not isinstance(raw_env, dict):
-                            unreadable.append(path)
-                            continue
+                        raw_env = _stored_environment(stored)
                         entry_key_env = key_environment(raw_env)
                         is_stale = entry_key_env != current_key_env
-            except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, EOFError):
+            except _ENTRY_ERRORS:
                 unreadable.append(path)
                 continue
 

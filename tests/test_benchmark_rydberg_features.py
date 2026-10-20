@@ -1538,7 +1538,14 @@ class TestCache:
 
     @pytest.mark.parametrize(
         "corruption",
-        ["empty", "invalid", "missing_features", "missing_environment"],
+        [
+            "empty",
+            "invalid",
+            "missing_features",
+            "missing_environment",
+            "invalid_seconds",
+            "non_object_environment",
+        ],
     )
     def test_unreadable_cache_entries_are_recomputed(
         self, tmp_path: Path, corruption: str
@@ -1561,6 +1568,20 @@ class TestCache:
                 seconds=np.float64(1.0),
                 environment=np.array(json.dumps(cache.environment)),
             )
+        elif corruption == "invalid_seconds":
+            np.savez(
+                first_path,
+                features=np.zeros((12, 4)),
+                seconds=np.array([1.0, 2.0]),
+                environment=np.array(json.dumps(cache.environment)),
+            )
+        elif corruption == "non_object_environment":
+            np.savez(
+                first_path,
+                features=np.zeros((12, 4)),
+                seconds=np.float64(1.0),
+                environment=np.array("[1]"),
+            )
         else:
             np.savez(
                 first_path,
@@ -1568,9 +1589,14 @@ class TestCache:
                 seconds=np.float64(1.0),
             )
 
-        recovered = cache.fetch(self.inputs, self.labels, config, compute)
+        with pytest.warns(RuntimeWarning, match="unreadable"):
+            recovered = cache.fetch(
+                self.inputs, self.labels, config, compute
+            )
+
         assert recovered.hit is False
         assert calls == [12, 12]
+
         np.testing.assert_array_equal(
             recovered.features,
             _map_by_hand(4, 1.0, 0.0, 1).transform(self.inputs),
@@ -1600,13 +1626,21 @@ class TestCache:
             return original_load(file, *args, **kwargs)
 
         monkeypatch.setattr(bench.np, "load", load_with_disappearance)
-        recovered = cache.fetch(self.inputs, self.labels, config, compute)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            recovered = cache.fetch(
+                self.inputs, self.labels, config, compute
+            )
 
         assert recovered.hit is False
         assert calls == [12, 12]
         monkeypatch.setattr(bench.np, "load", original_load)
         assert cache.fetch(self.inputs, self.labels, config, compute).hit is True
         assert calls == [12, 12]
+        np.testing.assert_array_equal(
+            recovered.features,
+            _map_by_hand(4, 1.0, 0.0, 1).transform(self.inputs),
+        )
 
     def test_a_change_of_the_data_is_a_miss(self, tmp_path: Path) -> None:
         compute, calls = self._counting()
